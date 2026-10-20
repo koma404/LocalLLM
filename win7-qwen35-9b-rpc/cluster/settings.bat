@@ -11,3 +11,7 @@ rem Optional: lock the roles to fixed PCs by computer name (run "hostname" to se
 rem Leave empty to allow any PC. WORKER_PCS is a space-separated list.
 set MAIN_PC=
 set WORKER_PCS=
+rem
+rem Optional: full path of the browser for open_ui.bat (empty = default browser), e.g.
+rem set BROWSER=C:\Program Files\Supermium\chrome.exe
+set BROWSER=

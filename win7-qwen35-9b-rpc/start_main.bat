@@ -39,10 +39,10 @@ for /f %%i in ('bin\qwen-helper.exe myip') do set MYIP=%%i
 echo %MYIP%> "%ROOT%\cluster\server.txt"
 echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users. Main IP %MYIP%
 echo   First start sends ~5 GB to the workers (1 Gbps: 1-2 min, 100 Mbps: 8-10 min).
-echo   When "server is listening" appears, anyone can run ask.bat. Keep this window open.
+echo   When "server is listening" appears, anyone can run open_ui.bat or ask.bat. Keep this window open.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
   -lm none -t 4 -c %CTX% -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 ^
-  --no-webui --reasoning off --host 0.0.0.0 --port 8080 ^
+  --reasoning off --host 0.0.0.0 --port 8080 ^
   --temp 0.7 --top-p 0.8 --top-k 20
 echo.
 echo Server stopped (a worker probably went offline). Restarting in 10 s, Ctrl+C to quit...

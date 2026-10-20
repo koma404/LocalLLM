@@ -4,10 +4,10 @@
 整个文件夹放在共享盘上（例如 Z:\qwen9b，即 \\jsa22\share\qwen9b）。
   主机（固定 1 台）   ：双击 start_main.bat
   工作机（固定 2~4 台）：双击 start_worker.bat
-  其他任何机器       ：双击 ask.bat 就能提问，不用拷贝、不用配置
+  其他任何机器       ：双击 open_ui.bat 打开网页聊天界面（或 ask.bat 命令行），不用拷贝、不用配置
 不需要填写任何 IP：工作机启动时把自己的 IP 登记到 cluster\workers\，
 主机启动时自动收集在线的工作机、自动计算分配比例，并把自己的 IP 写到 cluster\server.txt，
-ask.bat 读这个文件就知道该连哪台主机。
+open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
 
 一、第一次准备（管理员做一次）
 ----------------------------
@@ -21,6 +21,8 @@ ask.bat 读这个文件就知道该连哪台主机。
       LOCAL_DIR  每台机器的本地文件夹，必须在不被还原卡还原的分区（默认 D:\qwen9b）
                  主机在这里放一份模型的本地副本，工作机在这里放权重缓存（约 1.6 GB）
       USERS      同时提问的人数（默认 3）
+      BROWSER（可选）  open_ui.bat 用的浏览器完整路径，例如 Supermium 的 chrome.exe；
+                 留空则用系统默认浏览器
       MAIN_PC / WORKER_PCS（可选）填计算机名后，只有这些机器能当主机 / 工作机，
                  防止别人误点 start_worker.bat。计算机名用 hostname 命令查看。
 4. 在主机和每台工作机上，右键 setup_firewall.bat →“以管理员身份运行”一次
@@ -40,10 +42,14 @@ ask.bat 读这个文件就知道该连哪台主机。
      第一次启动要把约 5 GB 权重发给工作机（千兆网约 1~2 分钟，百兆网约 8~10 分钟），
      工作机缓存后，下次就快很多。出现 "listening on http://0.0.0.0:8080" 就可以提问了。
 3. 提问：任何机器打开 Z:\qwen9b，双击
+      open_ui.bat     图形界面：自动等主机就绪，然后用浏览器打开 http://主机IP:8080
+                      （如果没自动打开，就在 Supermium 地址栏手动输入窗口里显示的地址）
+                      输入框旁的灯泡按钮可开关思考（Default/Off = 不思考，Low = 最多 512 token）；
+                      每条回答下方显示速度；对话记录保存在各自浏览器里，左侧栏铅笔图标 = 新对话
       ask.bat         多轮对话（不思考）。/clear 新对话，/exit 退出
       ask_think.bat   多轮对话（思考，最多 400 token，约 3 分钟后作答）
       test.bat        单轮测速，最后一行 [ Prompt: xx t/s | Generation: xx t/s ]
-   如果主机还在加载，ask.bat 会自动等待（最多 5 分钟）。
+   如果主机还在加载，open_ui.bat / ask.bat 会自动等待（最多 5 分钟）。
    最多 USERS 个人同时生成，多出来的人会排队。
 4. 结束：关闭主机和工作机的黑色窗口。
 
@@ -59,14 +65,14 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
   3 台工作机：1 人提问约 2.0 t/s，3 人同时提问每人约 1.3~1.6 t/s
   2 台工作机：约 1.85 t/s
   峰值内存：工作机约 1.7~1.9 GB（2 台工作机时约 2.0 GB），主机约 1.8 GB（2 台工作机时约 2.1 GB）
-  提问的机器（ask.bat）只占几十 MB。
+  提问的机器：ask.bat 只占几十 MB；网页界面占的是浏览器内存（Supermium 一个标签页几百 MB）。
   每台机器在任务管理器 →“进程”里看“峰值工作集(内存)”：
   工作机看 ggml-rpc-server.exe，主机看 llama-server.exe。
 多台机器是为了凑够内存，速度不会因为工作机多而变快（工作机越多，网络往返越多，反而略慢）。
 
 五、常见问题
 ------------
-- ask.bat 一直显示 Waiting / 5 分钟后报 Cannot reach：
+- open_ui.bat / ask.bat 一直显示 Waiting / 5 分钟后报 Cannot reach：
   主机没启动、还在加载，或者主机的 8080 端口被防火墙拦截（主机上运行 setup_firewall.bat）。
 - 主机扫描时工作机显示 not reachable，但工作机窗口明明开着：
   工作机的 50052 端口被防火墙拦截（工作机上运行 setup_firewall.bat），或者不在同一网段。
@@ -80,7 +86,7 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
 
 六、文件
 --------
-  start_main.bat / start_worker.bat / ask.bat / ask_think.bat / test.bat / setup_firewall.bat
+  start_main.bat / start_worker.bat / open_ui.bat / ask.bat / ask_think.bat / test.bat / setup_firewall.bat
   prompt.txt                test.bat 用的提示词
   bin\                      ggml-rpc-server.exe、llama-server.exe、llama-cli.exe、qwen-helper.exe
   cluster\settings.bat      设置
