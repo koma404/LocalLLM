@@ -2,3 +2,5 @@
 bench_result.txt
 bench_log.txt
 rpc-cache/
+win7-qwen35-9b-rpc/cluster/workers/*.txt
+win7-qwen35-9b-rpc/cluster/server.txt
