@@ -34,6 +34,8 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
 1. 每台工作机：双击 start_worker.bat。显示 "Registered ... Keep this window open" 就是登记好了。
 2. 主机：双击 start_main.bat。
      [1/3] 第一次会把 5.7 GB 模型从共享盘复制到本地（之后就不用了）
+           复制时会显示百分比。如果很慢，可以按 Ctrl+C 停掉，删掉 LOCAL_DIR 里不完整的文件，
+           用资源管理器把 model 里的 gguf 复制到 LOCAL_DIR，再重新运行（会自动跳过复制）。
      [2/3] 列出登记过的工作机，OK = 在线，not reachable = 不在线（自动跳过）
      [3/3] 自动选择方案并启动：
            3 台以上工作机：模型全部放在工作机上（推荐 3 台）

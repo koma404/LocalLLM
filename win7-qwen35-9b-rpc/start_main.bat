@@ -13,7 +13,8 @@ exit /b 1
 if not exist "%LOCAL_DIR%" mkdir "%LOCAL_DIR%"
 set MODEL=%LOCAL_DIR%\Qwen3.5-9B-Q4_K_M.gguf
 echo [1/3] Copying the model to %LOCAL_DIR% (only the first time, 5.7 GB)...
-robocopy "%ROOT%\model" "%LOCAL_DIR%" Qwen3.5-9B-Q4_K_M.gguf /Z /R:2 /W:5 /NJH /NJS /NDL >nul
+echo   (progress in %% below; if it is very slow, copy the file to %LOCAL_DIR% with Explorer instead)
+robocopy "%ROOT%\model" "%LOCAL_DIR%" Qwen3.5-9B-Q4_K_M.gguf /R:2 /W:5 /NJH /NJS /NDL /NFL
 if not exist "%MODEL%" copy /y "%ROOT%\model\Qwen3.5-9B-Q4_K_M.gguf" "%MODEL%" >nul
 if not exist "%MODEL%" (
   echo   Local copy failed, reading the model from the share instead ^(slower^).
