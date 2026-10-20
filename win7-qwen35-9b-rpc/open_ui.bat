@@ -15,6 +15,8 @@ set TRIES=0
 bin\qwen-helper.exe health %SERVER%:8080 2000 && goto connected
 if %TRIES%==0 echo Waiting for the main PC %SERVER% (still loading, or not started)...
 set /a TRIES+=1
+set /a SECS=TRIES*5
+echo   waited %SECS% s of max 300 s ...
 if %TRIES% GEQ 60 goto fail
 ping -n 6 127.0.0.1 >nul
 goto wait

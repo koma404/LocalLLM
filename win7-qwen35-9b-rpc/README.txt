@@ -42,6 +42,10 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
            2 台工作机    ：主机自己也分担一部分（内存更紧张）
            少于 2 台     ：每 20 秒重新检查，直到够数
      第一次启动要把约 5 GB 权重发给工作机（千兆网约 1~2 分钟，百兆网约 8~10 分钟），
+     主机窗口会显示进度条：  loading text_model [#########.....] 45%  120 s, about 150 s left
+     每台工作机窗口会显示：  received  812 MB (network 812 MB, local cache 0 MB)  6.5 MB/s
+     传完后工作机显示 "All weights received. This worker is now serving the main PC."
+     进度条长时间不动、MB 数也不再增加，才是卡住了。
      工作机缓存后，下次就快很多。出现 "listening on http://0.0.0.0:8080" 就可以提问了。
 3. 提问：任何机器打开 Z:\qwen9b，双击
       open_ui.bat     图形界面：自动等主机就绪，然后用浏览器打开 http://主机IP:8080
@@ -100,7 +104,9 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
 编译说明：llama.cpp dd002b9，MinGW-w64 GCC 13，_WIN32_WINNT=0x0601，静态链接，-DGGML_RPC=ON。
 补丁（src-info\win7-patches.patch）：
   1) cpp-httplib：把 Win8 才有的 3 个函数换成 Win7 的等价函数；
-  2) llama-cli：连接外部服务器时转发 --reasoning、--reasoning-budget、-n。
+  2) llama-cli：连接外部服务器时转发 --reasoning、--reasoning-budget、-n；
+  3) 进度显示：llama-server 加载时打印进度条和剩余时间；ggml-rpc-server 打印已接收的 MB 数和速度，
+     并把每次探测连接、每个缓存文件的日志降为调试级别（避免刷屏）。
 qwen-helper.exe（src-info\qwen-helper.c）是给批处理用的小工具：取本机 IP、探测端口、
 检查服务状态、根据在线工作机数量生成分配方案。只用到 Win7 自带的系统函数。
 测试：除云端 Linux 模拟外，还在 Wine（Win7 SP1 模式）里实际运行了这些 Windows 程序和批处理：
