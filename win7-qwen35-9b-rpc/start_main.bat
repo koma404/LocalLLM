@@ -24,7 +24,7 @@ if not exist "%MODEL%" (
   echo   Model not found. Put Qwen3.5-9B-Q4_K_M.gguf into %ROOT%\model
   pause & exit /b 1
 )
-set /a CTX=%USERS%*2048
+if not defined CTX_TOTAL set CTX_TOTAL=16384
 if not exist "%ROOT%\cluster\paused" mkdir "%ROOT%\cluster\paused"
 set DASH_AUTO=
 if "%AUTO_PAUSE%"=="1" set DASH_AUTO=auto %MIN_WORKERS%
@@ -43,14 +43,14 @@ if %N_WORKERS% LSS 2 (
 )
 for /f %%i in ('bin\qwen-helper.exe myip') do set MYIP=%%i
 echo %MYIP%> "%ROOT%\cluster\server.txt"
-echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users. Main IP %MYIP%
+echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users, context %CTX_TOTAL%. Main IP %MYIP%
 echo   First start sends ~5 GB to the workers (1 Gbps: 1-2 min, 100 Mbps: 8-10 min).
 echo   When "listening on" appears, anyone can use open_ui.bat / ask.bat.
 echo   Keep this window open.
 if %N_WORKERS%==2 echo   NOTE: only 2 workers - the main PC also computes. Needs ~2.1 GB free here
 if %N_WORKERS%==2 echo         and ~2 GB on each worker. Start a 3rd worker if it crashes.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
-  -lm none -t 4 -c %CTX% -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
+  -lm none -t 4 -c %CTX_TOTAL% --kv-unified -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
   --reasoning off --host 0.0.0.0 --port 8080 ^
   --temp 0.7 --top-p 0.8 --top-k 20
 echo.
