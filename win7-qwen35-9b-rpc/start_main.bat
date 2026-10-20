@@ -25,6 +25,11 @@ if not exist "%MODEL%" (
   pause & exit /b 1
 )
 set /a CTX=%USERS%*2048
+if not exist "%ROOT%\cluster\paused" mkdir "%ROOT%\cluster\paused"
+set DASH_AUTO=
+if "%AUTO_PAUSE%"=="1" set DASH_AUTO=auto %MIN_WORKERS%
+rem live status window (users, workers, memory, speed); with AUTO_PAUSE=1 it also pauses workers that run out of memory
+start "Qwen cluster status" bin\qwen-helper.exe dashboard "%ROOT%" 127.0.0.1:8080 %DASH_AUTO%
 
 :loop
 echo.
@@ -42,10 +47,10 @@ echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users. Ma
 echo   First start sends ~5 GB to the workers (1 Gbps: 1-2 min, 100 Mbps: 8-10 min).
 echo   When "server is listening" appears, anyone can run open_ui.bat or ask.bat. Keep this window open.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
-  -lm none -t 4 -c %CTX% -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 ^
+  -lm none -t 4 -c %CTX% -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
   --reasoning off --host 0.0.0.0 --port 8080 ^
   --temp 0.7 --top-p 0.8 --top-k 20
 echo.
-echo Server stopped (a worker probably went offline). Restarting in 10 s, Ctrl+C to quit...
+echo Server stopped (a worker went offline or was paused for low memory). Restarting in 10 s, Ctrl+C to quit...
 ping -n 11 127.0.0.1 >nul
 goto loop

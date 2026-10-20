@@ -12,6 +12,12 @@ exit /b 1
 :role_ok
 if not exist "%LOCAL_DIR%\rpc-cache" mkdir "%LOCAL_DIR%\rpc-cache"
 set LLAMA_CACHE=%LOCAL_DIR%\rpc-cache
+if not exist "%ROOT%\cluster\status" mkdir "%ROOT%\cluster\status"
+if not exist "%ROOT%\cluster\paused" mkdir "%ROOT%\cluster\paused"
+rem status for status.bat / auto-pause; starting this script again resumes a paused worker
+set QWEN_STATUS_FILE=%ROOT%\cluster\status\%COMPUTERNAME%.txt
+set QWEN_PAUSED_FILE=%ROOT%\cluster\paused\%COMPUTERNAME%.txt
+del "%QWEN_PAUSED_FILE%" >nul 2>&1
 for /f %%i in ('bin\qwen-helper.exe myip') do set MYIP=%%i
 del "%ROOT%\cluster\workers\%COMPUTERNAME%.txt" >nul 2>&1
 echo %MYIP%:50052> "%ROOT%\cluster\workers\%COMPUTERNAME%.txt"

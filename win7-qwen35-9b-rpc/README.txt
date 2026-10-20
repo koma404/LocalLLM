@@ -59,6 +59,35 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
    最多 USERS 个人同时生成，多出来的人会排队。
 4. 结束：关闭主机和工作机的黑色窗口。
 
+二点五、集群状态窗口（status.bat）
+--------------------------------
+主机运行 start_main.bat 时会自动多开一个 "Qwen cluster status" 窗口；任何机器双击 status.bat
+也能打开同样的窗口（只看，不会暂停机器）。每 3 秒刷新：
+  Server ... : READY   users generating 2   waiting 0   speed 3.20 t/s total (1.60 t/s per user)
+      generating = 正在生成的人数，waiting = 排队的人数，speed = 实时生成速度
+  This PC (main): free ... MB   llama-server.exe ... MB      主机自己的内存
+  每台工作机一行：
+      STATE    waiting / receiving（在接收权重）/ serving（在工作）/ PAUSED / OFFLINE
+      FREE     那台机器的可用内存（MB）
+      PROC     ggml-rpc-server.exe 占用的内存（MB）
+      DISK-IN  每秒从硬盘换入的页数；持续 > 100 说明那台机器在用虚拟内存（会非常慢）
+      MS/STEP  那台机器每一步计算用的毫秒数（一步 = 每个正在生成的人各 1 个 token）
+      WARNING  LOW-MEMORY（可用 < 200 MB）/ SWAPPING / SLOW（比其他机器慢 2.5 倍以上）
+  只有 1 人在生成时，最后会显示每个 token 的耗时分解：
+      Per token: 510 ms total = 429 ms compute on workers + 81 ms network/main/other
+      如果 "network/main/other" 很大，瓶颈在网络或主机；如果某台的 MS/STEP 特别大，瓶颈就是那台。
+      （只有 2 台工作机时主机也承担计算，这部分算在 other 里。）
+
+自动暂停（cluster\settings.bat 里 AUTO_PAUSE=1，默认开启）：
+  主机上的状态窗口发现某台工作机连续约 18 秒 LOW-MEMORY 或 SWAPPING，
+  就把它记到 cluster\paused\ 里，并重启服务（不再用它），状态窗口的 Events 里会写明原因，
+  那台工作机的窗口也会显示 "*** PAUSED by the main PC"。
+  为了防止越暂停越少，暂停后剩下的工作机不能少于 MIN_WORKERS（默认 3），否则只提示不暂停；
+  两次自动暂停至少间隔 2 分钟。
+  恢复：在那台机器上腾出内存后，关掉窗口重新运行 start_worker.bat（会自动解除暂停），
+  然后在主机窗口 Ctrl+C 重启 start_main.bat 才会重新用上它。
+  注意：状态窗口要一直开着，自动暂停才会生效。
+
 三、自动恢复（看门狗）
 --------------------
 任何一台工作机关掉或断网后，下一次有人提问时主机会报错退出；
@@ -92,12 +121,14 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
 
 六、文件
 --------
-  start_main.bat / start_worker.bat / open_ui.bat / ask.bat / ask_think.bat / test.bat / setup_firewall.bat
+  start_main.bat / start_worker.bat / status.bat / open_ui.bat / ask.bat / ask_think.bat / test.bat / setup_firewall.bat
   prompt.txt                test.bat 用的提示词
   bin\                      ggml-rpc-server.exe、llama-server.exe、llama-cli.exe、qwen-helper.exe
   cluster\settings.bat      设置
   cluster\workers\          工作机自动登记（每台一个 计算机名.txt）
   cluster\server.txt        主机自动写入的 IP
+  cluster\status\           工作机每 3 秒写一次的状态（给 status.bat 用）
+  cluster\paused\           被自动暂停的工作机
   model\                    放模型
   src-info\                 补丁和 qwen-helper 源码
 
@@ -106,7 +137,8 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
   1) cpp-httplib：把 Win8 才有的 3 个函数换成 Win7 的等价函数；
   2) llama-cli：连接外部服务器时转发 --reasoning、--reasoning-budget、-n；
   3) 进度显示：llama-server 加载时打印进度条和剩余时间；ggml-rpc-server 打印已接收的 MB 数和速度，
-     并把每次探测连接、每个缓存文件的日志降为调试级别（避免刷屏）。
+     并把每次探测连接、每个缓存文件的日志降为调试级别（避免刷屏）；
+  4) 工作机状态：设置 QWEN_STATUS_FILE 时，ggml-rpc-server 每 3 秒写出内存、换页速率、每步计算耗时。
 qwen-helper.exe（src-info\qwen-helper.c）是给批处理用的小工具：取本机 IP、探测端口、
 检查服务状态、根据在线工作机数量生成分配方案。只用到 Win7 自带的系统函数。
 测试：除云端 Linux 模拟外，还在 Wine（Win7 SP1 模式）里实际运行了这些 Windows 程序和批处理：

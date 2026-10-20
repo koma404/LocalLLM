@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-rpc/ggml-rpc.cpp b/ggml/src/ggml-rpc/ggml-rpc.cpp
-index 49f1107..17006a2 100644
+index 49f1107..660d57d 100644
 --- a/ggml/src/ggml-rpc/ggml-rpc.cpp
 +++ b/ggml/src/ggml-rpc/ggml-rpc.cpp
-@@ -1385,6 +1385,47 @@ void ggml_backend_rpc_get_device_memory(const char * endpoint, uint32_t device,
+@@ -1385,6 +1385,175 @@ void ggml_backend_rpc_get_device_memory(const char * endpoint, uint32_t device,
  
  // RPC server-side implementation
  
@@ -47,10 +47,138 @@ index 49f1107..17006a2 100644
 +    p.phase = 2;
 +}
 +
++static int rpc_progress_phase() { return g_rpc_progress.phase; }
++static double rpc_progress_mb() { return (g_rpc_progress.net + g_rpc_progress.cache) / 1048576.0; }
++
++// patched: worker status file for the cluster dashboard (enabled by env QWEN_STATUS_FILE)
++static std::atomic<uint64_t> g_compute_n{0}, g_compute_us{0}, g_compute_max_us{0};
++
++static void rpc_compute_timed_add(int64_t us) {
++    g_compute_n++;
++    g_compute_us += (uint64_t) us;
++    uint64_t prev = g_compute_max_us.load();
++    while ((uint64_t) us > prev && !g_compute_max_us.compare_exchange_weak(prev, (uint64_t) us)) {}
++}
++
++#ifdef _WIN32
++#ifndef PSAPI_VERSION
++#define PSAPI_VERSION 2
++#endif
++#include <windows.h>
++#include <psapi.h>
++struct rpc_mem_info { double total_mb, avail_mb, ws_mb, peak_ws_mb, page_in_s; };
++typedef LONG (WINAPI *pdh_open_t)(LPCWSTR, DWORD_PTR, HANDLE *);
++typedef LONG (WINAPI *pdh_add_t)(HANDLE, LPCWSTR, DWORD_PTR, HANDLE *);
++typedef LONG (WINAPI *pdh_collect_t)(HANDLE);
++typedef LONG (WINAPI *pdh_fmt_t)(HANDLE, DWORD, LPDWORD, void *);
++static void rpc_get_mem(rpc_mem_info & m) {
++    MEMORYSTATUSEX ms; ms.dwLength = sizeof(ms);
++    GlobalMemoryStatusEx(&ms);
++    m.total_mb = ms.ullTotalPhys / 1048576.0;
++    m.avail_mb = ms.ullAvailPhys / 1048576.0;
++    PROCESS_MEMORY_COUNTERS pmc; pmc.cb = sizeof(pmc);
++    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
++        m.ws_mb = pmc.WorkingSetSize / 1048576.0;
++        m.peak_ws_mb = pmc.PeakWorkingSetSize / 1048576.0;
++    }
++    // hard page faults (pages read from disk) per second, via pdh.dll loaded at runtime
++    static HANDLE query = nullptr, counter = nullptr;
++    static pdh_collect_t collect = nullptr;
++    static pdh_fmt_t fmt = nullptr;
++    static bool tried = false;
++    if (!tried) {
++        tried = true;
++        HMODULE h = LoadLibraryA("pdh.dll");
++        if (h) {
++            auto open = (pdh_open_t) (void *) GetProcAddress(h, "PdhOpenQueryW");
++            auto add  = (pdh_add_t)  (void *) GetProcAddress(h, "PdhAddEnglishCounterW");
++            collect   = (pdh_collect_t) (void *) GetProcAddress(h, "PdhCollectQueryData");
++            fmt       = (pdh_fmt_t) (void *) GetProcAddress(h, "PdhGetFormattedCounterValue");
++            if (open && add && collect && fmt && open(nullptr, 0, &query) == 0 &&
++                add(query, L"\\Memory\\Pages Input/sec", 0, &counter) == 0) {
++                collect(query);
++            } else {
++                query = nullptr;
++            }
++        }
++    }
++    m.page_in_s = -1;
++    if (query && collect(query) == 0) {
++        struct { DWORD status; DWORD pad; double value; } v = {}; // PDH_FMT_COUNTERVALUE with PDH_FMT_DOUBLE
++        if (fmt(counter, 0x00000200, nullptr, &v) == 0) {
++            m.page_in_s = v.value;
++        }
++    }
++}
++#else
++struct rpc_mem_info { double total_mb, avail_mb, ws_mb, peak_ws_mb, page_in_s; };
++static void rpc_get_mem(rpc_mem_info & m) {
++    auto read_kb = [](const char * file, const char * key) -> double {
++        FILE * f = fopen(file, "r"); if (!f) return 0;
++        char line[256]; double v = 0; size_t kl = strlen(key);
++        while (fgets(line, sizeof(line), f)) if (!strncmp(line, key, kl)) { v = atof(line + kl); break; }
++        fclose(f); return v;
++    };
++    m.total_mb   = read_kb("/proc/meminfo", "MemTotal:") / 1024.0;
++    m.avail_mb   = read_kb("/proc/meminfo", "MemAvailable:") / 1024.0;
++    m.ws_mb      = read_kb("/proc/self/status", "VmRSS:") / 1024.0;
++    m.peak_ws_mb = read_kb("/proc/self/status", "VmHWM:") / 1024.0;
++    static double last = -1; static auto t_last = std::chrono::steady_clock::now();
++    double cur = read_kb("/proc/vmstat", "pgmajfault ");
++    auto now = std::chrono::steady_clock::now();
++    double dt = std::chrono::duration<double>(now - t_last).count();
++    m.page_in_s = (last >= 0 && dt > 0) ? (cur - last) / dt : 0;
++    last = cur; t_last = now;
++}
++#endif
++
++static int rpc_progress_phase();
++static double rpc_progress_mb();
++
++static void rpc_status_thread(std::string path, std::string paused_path) {
++    uint64_t seq = 0;
++    bool paused_shown = false;
++    while (true) {
++        std::this_thread::sleep_for(std::chrono::seconds(3));
++        rpc_mem_info m = {};
++        rpc_get_mem(m);
++        uint64_t n = g_compute_n.exchange(0), us = g_compute_us.exchange(0), mx = g_compute_max_us.exchange(0);
++        const int phase = rpc_progress_phase();
++        std::string tmp = path + ".tmp";
++        FILE * f = fopen(tmp.c_str(), "w");
++        if (f) {
++            fprintf(f, "seq=%llu\nphase=%s\nrecv_mb=%.0f\nmem_total_mb=%.0f\nmem_avail_mb=%.0f\nproc_mb=%.0f\nproc_peak_mb=%.0f\n"
++                       "page_in_s=%.0f\ncompute_n=%llu\ncompute_ms_avg=%.1f\ncompute_ms_max=%.1f\n",
++                    (unsigned long long) ++seq, phase == 0 ? "waiting" : phase == 1 ? "receiving" : "serving",
++                    rpc_progress_mb(), m.total_mb, m.avail_mb, m.ws_mb, m.peak_ws_mb, m.page_in_s,
++                    (unsigned long long) n, n ? us / 1000.0 / n : 0.0, mx / 1000.0);
++            fclose(f);
++#ifdef _WIN32
++            MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
++#else
++            rename(tmp.c_str(), path.c_str());
++#endif
++        }
++        if (!paused_path.empty()) {
++            FILE * pf = fopen(paused_path.c_str(), "r");
++            if (pf && !paused_shown) {
++                char reason[256] = {0};
++                if (!fgets(reason, sizeof(reason), pf)) reason[0] = 0;
++                fprintf(stderr, "\n*** PAUSED by the main PC: %s", reason);
++                fprintf(stderr, "*** Free some memory on this PC, then close this window and run start_worker.bat again.\n");
++                paused_shown = true;
++            } else if (!pf) {
++                paused_shown = false;
++            }
++            if (pf) fclose(pf);
++        }
++    }
++}
++
  class rpc_server {
  public:
      rpc_server(std::vector<ggml_backend_t> all_backends, const char * cache_dir)
-@@ -1747,9 +1788,10 @@ bool rpc_server::set_tensor(const std::vector<uint8_t> & input) {
+@@ -1747,9 +1916,10 @@ bool rpc_server::set_tensor(const std::vector<uint8_t> & input) {
          fs::path cache_file = fs::path(cache_dir) / hash_str;
          std::ofstream ofs(cache_file, std::ios::binary);
          ofs.write((const char *)data, size);
@@ -62,7 +190,7 @@ index 49f1107..17006a2 100644
      return true;
  }
  
-@@ -1878,6 +1920,7 @@ bool rpc_server::set_tensor_hash(const rpc_msg_set_tensor_hash_req & request, rp
+@@ -1878,6 +2048,7 @@ bool rpc_server::set_tensor_hash(const rpc_msg_set_tensor_hash_req & request, rp
          }
      }
      ggml_backend_tensor_set(tensor, cached_file.data(), request.offset, size);
@@ -70,7 +198,7 @@ index 49f1107..17006a2 100644
      response.result = 1;
      return true;
  }
-@@ -2104,6 +2147,7 @@ ggml_tensor * rpc_server::create_node(uint64_t id,
+@@ -2104,6 +2275,7 @@ ggml_tensor * rpc_server::create_node(uint64_t id,
  }
  
  bool rpc_server::graph_compute(const std::vector<uint8_t> & input) {
@@ -78,7 +206,42 @@ index 49f1107..17006a2 100644
      // serialization format:
      // | device (4 bytes) | uid (8 bytes) | n_nodes (4 bytes) | nodes (n_nodes * sizeof(uint64_t) | n_tensors (4 bytes) | tensors (n_tensors * sizeof(rpc_tensor)) |
      if (input.size() < 2*sizeof(uint32_t) + sizeof(uint64_t)) {
-@@ -2820,9 +2864,13 @@ void ggml_backend_rpc_start_server(const char * endpoint, const char * cache_dir
+@@ -2688,9 +2860,11 @@ static void rpc_serve_client(const std::vector<ggml_backend_t> & backends, const
+                 if (!recv_msg(sock, input)) {
+                     return;
+                 }
++                auto t0 = std::chrono::steady_clock::now();
+                 if (!server.graph_compute(input)) {
+                     return;
+                 }
++                rpc_compute_timed_add(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+                 break;
+             }
+             case RPC_CMD_GRAPH_RECOMPUTE: {
+@@ -2698,9 +2872,11 @@ static void rpc_serve_client(const std::vector<ggml_backend_t> & backends, const
+                 if (!recv_msg(sock, &request, sizeof(request))) {
+                     return;
+                 }
++                auto t0 = std::chrono::steady_clock::now();
+                 if (!server.graph_recompute(request)) {
+                     return;
+                 }
++                rpc_compute_timed_add(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+                 break;
+             }
+             case RPC_CMD_COMM_INIT: {
+@@ -2766,6 +2942,10 @@ void ggml_backend_rpc_start_server(const char * endpoint, const char * cache_dir
+         return;
+     }
+     std::vector<ggml_backend_t> backends;
++    if (const char * sf = getenv("QWEN_STATUS_FILE")) {
++        const char * pf = getenv("QWEN_PAUSED_FILE");
++        std::thread(rpc_status_thread, std::string(sf), std::string(pf ? pf : "")).detach();
++    }
+     LOG_INFO("Starting RPC server v%d.%d.%d\n",
+         RPC_PROTO_MAJOR_VERSION,
+         RPC_PROTO_MINOR_VERSION,
+@@ -2820,9 +3000,13 @@ void ggml_backend_rpc_start_server(const char * endpoint, const char * cache_dir
              LOG_ERROR("Failed to accept client connection\n");
              return;
          }

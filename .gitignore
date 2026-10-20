@@ -4,3 +4,5 @@ bench_log.txt
 rpc-cache/
 win7-qwen35-9b-rpc/cluster/workers/*.txt
 win7-qwen35-9b-rpc/cluster/server.txt
+win7-qwen35-9b-rpc/cluster/status/
+win7-qwen35-9b-rpc/cluster/paused/
