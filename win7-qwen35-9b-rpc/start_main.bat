@@ -13,7 +13,7 @@ exit /b 1
 if not exist "%LOCAL_DIR%" mkdir "%LOCAL_DIR%"
 set MODEL=%LOCAL_DIR%\Qwen3.5-9B-Q4_K_M.gguf
 echo [1/3] Copying the model to %LOCAL_DIR% (only the first time, 5.7 GB)...
-echo   (progress in %% below; if it is very slow, copy the file to %LOCAL_DIR% with Explorer instead)
+echo   Progress in %% below. If very slow: copy it to %LOCAL_DIR% with Explorer.
 robocopy "%ROOT%\model" "%LOCAL_DIR%" Qwen3.5-9B-Q4_K_M.gguf /R:2 /W:5 /NJH /NJS /NDL
 if not exist "%MODEL%" copy /y "%ROOT%\model\Qwen3.5-9B-Q4_K_M.gguf" "%MODEL%" >nul
 if not exist "%MODEL%" (
@@ -45,7 +45,10 @@ for /f %%i in ('bin\qwen-helper.exe myip') do set MYIP=%%i
 echo %MYIP%> "%ROOT%\cluster\server.txt"
 echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users. Main IP %MYIP%
 echo   First start sends ~5 GB to the workers (1 Gbps: 1-2 min, 100 Mbps: 8-10 min).
-echo   When "server is listening" appears, anyone can run open_ui.bat or ask.bat. Keep this window open.
+echo   When "listening on" appears, anyone can use open_ui.bat / ask.bat.
+echo   Keep this window open.
+if %N_WORKERS%==2 echo   NOTE: only 2 workers - the main PC also computes. Needs ~2.1 GB free here
+if %N_WORKERS%==2 echo         and ~2 GB on each worker. Start a 3rd worker if it crashes.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
   -lm none -t 4 -c %CTX% -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
   --reasoning off --host 0.0.0.0 --port 8080 ^

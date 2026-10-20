@@ -1,5 +1,5 @@
 diff --git a/ggml/src/ggml-rpc/ggml-rpc.cpp b/ggml/src/ggml-rpc/ggml-rpc.cpp
-index 49f1107..660d57d 100644
+index 49f1107..62e5281 100644
 --- a/ggml/src/ggml-rpc/ggml-rpc.cpp
 +++ b/ggml/src/ggml-rpc/ggml-rpc.cpp
 @@ -1385,6 +1385,175 @@ void ggml_backend_rpc_get_device_memory(const char * endpoint, uint32_t device,
@@ -29,7 +29,7 @@ index 49f1107..660d57d 100644
 +    if (std::chrono::duration<double>(now - p.t_last).count() >= 0.5) {
 +        p.t_last = now;
 +        double sec = std::chrono::duration<double>(now - p.t_start).count();
-+        fprintf(stderr, "\r  received %6.0f MB  (network %6.0f MB, local cache %6.0f MB)  %5.1f MB/s   ",
++        fprintf(stderr, "\r  received %5.0f MB (network %5.0f, cache %5.0f) %5.1f MB/s ",
 +                (p.net + p.cache) / 1048576.0, p.net / 1048576.0, p.cache / 1048576.0,
 +                sec > 0 ? (p.net + p.cache) / 1048576.0 / sec : 0.0);
 +    }
@@ -41,7 +41,7 @@ index 49f1107..660d57d 100644
 +        return;
 +    }
 +    double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - p.t_start).count();
-+    fprintf(stderr, "\r  received %6.0f MB  (network %6.0f MB, local cache %6.0f MB)  in %.0f s          \n",
++    fprintf(stderr, "\r  received %5.0f MB (network %5.0f, cache %5.0f) in %.0f s       \n",
 +            (p.net + p.cache) / 1048576.0, p.net / 1048576.0, p.cache / 1048576.0, sec);
 +    fprintf(stderr, "All weights received. This worker is now serving the main PC.\n");
 +    p.phase = 2;
@@ -294,7 +294,7 @@ index d8787c1..2bae920 100644
      bool stream_error = false;
  
 diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
-index b2116b1..008f546 100644
+index b2116b1..c306283 100644
 --- a/tools/server/server-context.cpp
 +++ b/tools/server/server-context.cpp
 @@ -1084,6 +1084,7 @@ private:
@@ -305,7 +305,7 @@ index b2116b1..008f546 100644
          load_progress_data(server_context_impl * ctx, const std::string & stage) : ctx(ctx), stage(stage) {}
      };
      static bool load_progress_callback(float progress, void * user_data) {
-@@ -1101,6 +1102,26 @@ private:
+@@ -1101,6 +1102,27 @@ private:
              }
              t_last = t_now;
          }
@@ -316,14 +316,15 @@ index b2116b1..008f546 100644
 +                d->t_start_ms = t_now;
 +            }
 +            const double sec = (t_now - d->t_start_ms) / 1000.0;
-+            const int width = 30;
++            const int width = 20; // keep the whole line under 80 columns (Win7 console wraps otherwise)
 +            const int filled = (int) (progress * width + 0.5f);
 +            char eta[32] = "";
 +            if (progress > 0.02f && progress < 1.0f) {
-+                snprintf(eta, sizeof(eta), ", about %.0f s left", sec * (1.0 - progress) / progress);
++                snprintf(eta, sizeof(eta), ", ~%.0f s left", sec * (1.0 - progress) / progress);
 +            }
-+            fprintf(stderr, "\r  loading %s [%.*s%.*s] %3.0f%%  %.0f s%s      ", d->stage.c_str(),
-+                    filled, "##############################", width - filled, "..............................",
++            fprintf(stderr, "\r  loading %s [%.*s%.*s] %3.0f%%  %.0f s%s   ",
++                    d->stage == "text_model" ? "model" : d->stage.c_str(),
++                    filled, "####################", width - filled, "....................",
 +                    progress * 100.0f, sec, eta);
 +            if (progress >= 1.0f) {
 +                fprintf(stderr, "\n");
