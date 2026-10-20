@@ -1,3 +1,4 @@
 *.gguf
 bench_result.txt
 bench_log.txt
+rpc-cache/

@@ -9,4 +9,5 @@ cmake -S . -B build-win7 -DCMAKE_TOOLCHAIN_FILE=../mingw.cmake -DCMAKE_BUILD_TYP
  -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON -DGGML_BMI2=ON \
  -DGGML_OPENMP=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=ON \
  -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"
-cmake --build build-win7 -j4 --target llama-cli llama-bench
+cmake --build build-win7 -j4 --target llama-cli llama-bench llama-server
+# 9B cluster build: add -DGGML_RPC=ON and also build ggml-rpc-server
