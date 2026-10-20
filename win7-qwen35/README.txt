@@ -9,7 +9,9 @@
                            sha256 aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223
                            来源：huggingface.co/unsloth/Qwen3.5-2B-GGUF
   prompt.txt               测试提示词（UTF-8），可用记事本修改
-  run.bat / bench.bat      双击运行
+  llama-server.exe         网页聊天界面（UI）
+  run.bat / bench.bat      双击运行（命令行测试 / 测速）
+  server.bat               双击启动网页界面
   src-info\                编译脚本和 Win7 补丁（用于复现编译）
 
 llama.cpp：从源码编译，commit dd002b9（2026-10-20，约 b11750）。
@@ -37,6 +39,17 @@ bench.bat：输出一张表格，同时保存到 bench_result.txt
     tg64  那行 → 生成 t/s   ← 成功标准看这个：≥ 1 t/s
 参考：在一台 4 核 AVX2 云主机上（Linux，同一份源码）pp 约 85~98 t/s，tg 约 13 t/s。
 i5-6600 应该在同一量级；瓶颈多半是内存带宽（单通道还是双通道）。
+
+二点五、网页界面（server.bat）
+----------------------------
+双击 server.bat，黑色窗口里出现 "server is listening on http://127.0.0.1:8080" 即启动完成，
+约 20 秒后会自动用默认浏览器打开该地址；如果默认浏览器不是 Supermium，
+就手动在 Supermium 地址栏输入 http://127.0.0.1:8080 。
+每条回答下方会显示生成速度（xx t/s）。
+上下文为 2048（网页界面每次会多带约 300 token，1024 太容易满）；聊久了变慢或报错时，
+点左上角“新对话”即可。峰值内存实测仍约 1.4 GB（任务管理器里看 llama-server.exe）。
+用完直接关闭黑色窗口即可停止。只监听本机 127.0.0.1，机房里其他电脑访问不到。
+如果 Windows 防火墙弹窗询问，点“取消”也不影响本机使用。
 
 三、峰值内存（任务管理器）
 --------------------------
