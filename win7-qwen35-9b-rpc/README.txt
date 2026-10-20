@@ -111,8 +111,15 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
 ------------
 - open_ui.bat / ask.bat 一直显示 Waiting / 5 分钟后报 Cannot reach：
   主机没启动、还在加载，或者主机的 8080 端口被防火墙拦截（主机上运行 setup_firewall.bat）。
-- 主机扫描时工作机显示 not reachable，但工作机窗口明明开着：
-  工作机的 50052 端口被防火墙拦截（工作机上运行 setup_firewall.bat），或者不在同一网段。
+- 主机扫描时工作机显示：
+    not running                     那台没运行 start_worker.bat（或者登记的是以前的旧记录），正常跳过
+    RUNNING but port 50052 is blocked  那台在运行，但主机连不上它的端口，几乎都是防火墙：
+      1) 在那台机器上右键 setup_firewall.bat →“以管理员身份运行”；
+      2) 控制面板 → Windows 防火墙 → 高级设置 → 入站规则，删掉 ggml-rpc-server 的“阻止”规则
+         （第一次运行时防火墙弹窗点了“取消”就会生成这条规则，它比放行规则优先）；
+      3) 主机窗口 Ctrl+C，重新运行 start_main.bat。
+- 换了共享盘上的文件夹位置后，每台工作机都要在新位置重新运行 start_worker.bat，
+  否则它登记在旧文件夹里，新主机看不到。
 - start_worker.bat 报 Cannot write：该机器对共享盘的 cluster\workers 没有写权限。
 - 集群运行期间，不要修改或覆盖共享盘上的 .bat 文件！
   cmd 是边读边执行批处理的，文件内容一变，正在运行的窗口会读到错乱的命令。

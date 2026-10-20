@@ -88,7 +88,8 @@ static int cmd_health(const char * hp, int ms) {
     return (strstr(buf, " 200 ") && strstr(buf, "\"ok\"")) ? 0 : 1;
 }
 
-static int cmp_str(const void * a, const void * b) { return strcmp((const char *)a, (const char *)b); }
+
+static void read_small(const char * path, char * buf, int cap);
 
 static int is_paused(const char * root_cluster, const char * worker_file) {
     // worker_file is "NAME.txt"; paused marker is cluster\paused\NAME.txt
@@ -97,7 +98,7 @@ static int is_paused(const char * root_cluster, const char * worker_file) {
 }
 
 static int cmd_plan(const char * dir) {
-    static char found[64][128]; int nf = 0;
+    static char found[64][128]; static char found_name[64][MAX_PATH]; int nf = 0;
     char pattern[MAX_PATH]; snprintf(pattern, sizeof(pattern), "%s\\*.txt", dir);
     WIN32_FIND_DATAA fd; HANDLE h = FindFirstFileA(pattern, &fd);
     if (h != INVALID_HANDLE_VALUE) {
@@ -112,21 +113,50 @@ static int cmd_plan(const char * dir) {
             char line[128] = {0};
             if (fgets(line, sizeof(line), f)) {
                 line[strcspn(line, "\r\n \t")] = 0;
-                if (line[0] && nf < 64) strcpy(found[nf++], line);
+                if (line[0] && nf < 64) { strcpy(found_name[nf], fd.cFileName); strcpy(found[nf++], line); }
             }
             fclose(f);
         } while (FindNextFileA(h, &fd));
         FindClose(h);
     }
-    qsort(found, nf, sizeof(found[0]), cmp_str);
+    // sort by address, keeping the registration file name with each entry
+    for (int a = 0; a < nf; a++) for (int b = a + 1; b < nf; b++) if (strcmp(found[b], found[a]) < 0) {
+        char t[MAX_PATH];
+        strcpy(t, found[a]); strcpy(found[a], found[b]); strcpy(found[b], t);
+        strcpy(t, found_name[a]); strcpy(found_name[a], found_name[b]); strcpy(found_name[b], t);
+    }
     char alive[64][128]; int na = 0;
     for (int i = 0; i < nf; i++) {
         int dup = 0;
         for (int j = 0; j < na; j++) if (!strcmp(alive[j], found[i])) dup = 1;
         if (dup) continue;
         int ok = cmd_probe(found[i], 1500) == 0;
-        fprintf(stderr, "  worker %-24s %s\n", found[i], ok ? "OK" : "not reachable (skipped)");
-        if (ok) strcpy(alive[na++], found[i]);
+        if (!ok) {
+            // is that worker alive? (its rpc-server keeps rewriting cluster\status\NAME.txt)
+            char sp[MAX_PATH], b1[512], b2[512];
+            snprintf(sp, sizeof(sp), "%s\\..\\status\\%s", dir, found_name[i]);
+            read_small(sp, b1, sizeof(b1));
+            if (b1[0]) {
+                Sleep(3500);
+                read_small(sp, b2, sizeof(b2));
+                if (strcmp(b1, b2) != 0) {
+                    // running: retry a few times (it may have just started), then explain
+                    for (int k = 0; k < 3 && !ok; k++) { Sleep(2000); ok = cmd_probe(found[i], 2000) == 0; }
+                    if (!ok) {
+                        fprintf(stderr, "  worker %-24s RUNNING but port 50052 is blocked (skipped)\n", found[i]);
+                        fprintf(stderr, "         -> on that PC: run setup_firewall.bat as administrator and delete any\n");
+                        fprintf(stderr, "            inbound BLOCK rule for ggml-rpc-server.exe in the firewall settings\n");
+                        continue;
+                    }
+                }
+            }
+        }
+        if (!ok) {
+            fprintf(stderr, "  worker %-24s not running (skipped)\n", found[i]);
+            continue;
+        }
+        fprintf(stderr, "  worker %-24s OK\n", found[i]);
+        strcpy(alive[na++], found[i]);
     }
     printf("set N_WORKERS=%d\n", na);
     if (na < 2) return 0;
