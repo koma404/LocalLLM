@@ -1,0 +1,78 @@
+diff --git a/tools/cli/cli-context.cpp b/tools/cli/cli-context.cpp
+index d8787c1..2bae920 100644
+--- a/tools/cli/cli-context.cpp
++++ b/tools/cli/cli-context.cpp
+@@ -357,6 +357,18 @@ bool cli_context::generate_completion(generated_content & content_out, cli_timin
+     if (!client.model.empty()) {
+         body["model"] = client.model;
+     }
++    // patched: forward per-client options when talking to an external server (--server-base)
++    if (!params.server_base.empty()) {
++        if (params.enable_reasoning >= 0) {
++            body["chat_template_kwargs"] = {{"enable_thinking", params.enable_reasoning == 1}};
++        }
++        if (params.enable_reasoning == 1 && params.sampling.reasoning_budget_tokens >= 0) {
++            body["thinking_budget_tokens"] = params.sampling.reasoning_budget_tokens;
++        }
++        if (params.n_predict > 0) {
++            body["max_tokens"] = params.n_predict;
++        }
++    }
+ 
+     bool stream_error = false;
+ 
+diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
+index 934d990..211cbb0 100644
+--- a/vendor/cpp-httplib/httplib.cpp
++++ b/vendor/cpp-httplib/httplib.cpp
+@@ -1705,8 +1705,13 @@ bool mmap::open(const char *path) {
+   if (wpath.empty()) { return false; }
+ 
+   hFile_ =
++#if _WIN32_WINNT < 0x0602 // Win7: CreateFile2 is Win8+
++      ::CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
++                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
++#else
+       ::CreateFile2(wpath.c_str(), GENERIC_READ,
+                     FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING, NULL);
++#endif
+ 
+   if (hFile_ == INVALID_HANDLE_VALUE) { return false; }
+ 
+@@ -1719,7 +1724,11 @@ bool mmap::open(const char *path) {
+   size_ = static_cast<size_t>(size.QuadPart);
+ 
+   hMapping_ =
++#if _WIN32_WINNT < 0x0602
++      ::CreateFileMappingW(hFile_, NULL, PAGE_READONLY, 0, 0, NULL);
++#else
+       ::CreateFileMappingFromApp(hFile_, NULL, PAGE_READONLY, size_, NULL);
++#endif
+ 
+   // Special treatment for an empty file...
+   if (hMapping_ == NULL && size_ == 0) {
+@@ -1733,7 +1742,11 @@ bool mmap::open(const char *path) {
+     return false;
+   }
+ 
++#if _WIN32_WINNT < 0x0602
++  addr_ = ::MapViewOfFile(hMapping_, FILE_MAP_READ, 0, 0, 0);
++#else
+   addr_ = ::MapViewOfFileFromApp(hMapping_, FILE_MAP_READ, 0, 0);
++#endif
+ 
+   if (addr_ == nullptr) {
+     close();
+diff --git a/vendor/cpp-httplib/httplib.h b/vendor/cpp-httplib/httplib.h
+index 4ab2b5a..4730f93 100644
+--- a/vendor/cpp-httplib/httplib.h
++++ b/vendor/cpp-httplib/httplib.h
+@@ -12,7 +12,7 @@
+ #define CPPHTTPLIB_VERSION_NUM "0x003e00"
+ 
+ #ifdef _WIN32
+-#if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0A00
++#if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0601 // patched: allow Win7
+ #error                                                                         \
+     "cpp-httplib doesn't support Windows 8 or lower. Please use Windows 10 or later."
+ #endif
