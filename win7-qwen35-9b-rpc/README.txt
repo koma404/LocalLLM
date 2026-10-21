@@ -1,4 +1,4 @@
-﻿﻿Qwen3.5-9B (Q4_K_M) 机房共享盘一键集群（Win7，局域网 RPC，纯命令行）
+﻿Qwen3.5-9B (Q4_K_M) 机房共享盘一键集群（Win7，局域网 RPC，纯命令行）
 =====================================================================
 
 整个文件夹放在共享盘上（例如 Z:\qwen9b，即 \\jsa22\share\qwen9b）。
@@ -16,6 +16,10 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
       下载：https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf
       5,680,522,464 字节，sha256 03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8
       核对：certutil -hashfile Qwen3.5-9B-Q4_K_M.gguf SHA256
+   （可选，看图功能）再下载视觉文件也放进 model\：
+      https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf
+      918,166,080 字节，sha256 f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f
+      不放这个文件也能正常用，只是不能发图片。
    注意：模型超过 4 GB，FAT32 格式的 U 盘拷不进去，要用 exFAT / NTFS 的 U 盘，或者直接通过网络复制。
 3. 用记事本打开 cluster\settings.bat，确认：
       LOCAL_DIR  每台机器的本地文件夹，必须在不被还原卡还原的分区（默认 D:\qwen9b）
@@ -23,6 +27,8 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
       USERS      同时提问的人数（默认 3）
       CTX_TOTAL  总上下文长度（默认 16384 token），所有人共用一个池子，一个人用时可以用满。
                  很省内存：每 1000 token 所有机器合计只多约 32 MB。想更长就改成 32768。
+      VISION     看图功能：1 = 开（默认，需要 model\mmproj-F16.gguf），0 = 关
+      IMAGE_TOKENS  每张图最多变成多少 token（默认 256）。越大看得越细，但越慢、越占上下文
       BROWSER（可选）  open_ui.bat 用的浏览器完整路径，例如 Supermium 的 chrome.exe；
                  留空则用系统默认浏览器
       MAIN_PC / WORKER_PCS（可选）填计算机名后，只有这些机器能当主机 / 工作机，
@@ -53,6 +59,7 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
       open_ui.bat     图形界面：自动等主机就绪，然后用浏览器打开 http://主机IP:8080
                       （如果没自动打开，就在 Supermium 地址栏手动输入窗口里显示的地址）
                       输入框旁的灯泡按钮可开关思考（Default/Off = 不思考，Low = 最多 512 token）；
+                      输入框旁的附件按钮可以上传图片（或直接粘贴截图），让模型看图回答；
                       每条回答下方显示速度；对话记录保存在各自浏览器里，左侧栏铅笔图标 = 新对话
       ask.bat         多轮对话（不思考）。/clear 新对话，/exit 退出
       ask_think.bat   多轮对话（思考，最多 400 token，约 3 分钟后作答）
@@ -102,6 +109,8 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
   3 台工作机：1 人提问约 2.0 t/s，3 人同时提问每人约 1.3~1.6 t/s
   2 台工作机：约 1.85 t/s
   峰值内存：工作机约 1.7~1.9 GB（2 台工作机时约 2.0 GB），主机约 1.8 GB（2 台工作机时约 2.1 GB）
+  开启看图（VISION=1）时主机再多约 0.9 GB，工作机不变；内存紧张的主机可以设 VISION=0。
+  看图：一张图（IMAGE_TOKENS=256）在回答前多约 10~20 秒处理时间，之后生成速度不变。
   提问的机器：ask.bat 只占几十 MB；网页界面占的是浏览器内存（Supermium 一个标签页几百 MB）。
   每台机器在任务管理器 →“进程”里看“峰值工作集(内存)”：
   工作机看 ggml-rpc-server.exe，主机看 llama-server.exe。
@@ -124,6 +133,9 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
 - 集群运行期间，不要修改或覆盖共享盘上的 .bat 文件！
   cmd 是边读边执行批处理的，文件内容一变，正在运行的窗口会读到错乱的命令。
   要更新文件，先关掉所有窗口再改。
+- 网页里没有上传图片的按钮 / 提示不支持图片：主机窗口 [3/3] 那行显示 images off，
+  检查 model\mmproj-F16.gguf 是否存在、settings.bat 里 VISION=1，然后重启 start_main.bat。
+  ask.bat / ask_think.bat 是纯文字的，不能发图片，请用 open_ui.bat。
 - 中文显示成乱码：控制台字体问题，右键标题栏 → 属性 → 字体，换成 TrueType 字体。
 - 安全：8080 和 50052 端口都没有密码验证，局域网内任何人都能连接。
   只在可信的机房局域网里使用，用完关闭窗口。

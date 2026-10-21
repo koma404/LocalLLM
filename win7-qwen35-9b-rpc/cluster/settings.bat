@@ -17,6 +17,12 @@ rem out of memory / swapping (then restarts the server without it), but never go
 set AUTO_PAUSE=1
 set MIN_WORKERS=3
 rem
+rem Image input (multimodal): 1 = on, 0 = off. Needs model\mmproj-F16.gguf (0.9 GB).
+rem The vision part runs on the main PC only (+~0.9 GB memory there); workers are not affected.
+rem IMAGE_TOKENS = max tokens one image becomes: bigger = more detail but slower (256 is ~10-20 s).
+set VISION=1
+set IMAGE_TOKENS=256
+rem
 rem Optional: lock the roles to fixed PCs by computer name (run "hostname" to see it).
 rem Leave empty to allow any PC. WORKER_PCS is a space-separated list.
 set MAIN_PC=

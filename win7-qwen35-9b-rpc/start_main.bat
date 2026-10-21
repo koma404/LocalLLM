@@ -25,6 +25,22 @@ if not exist "%MODEL%" (
   pause & exit /b 1
 )
 if not defined CTX_TOTAL set CTX_TOTAL=16384
+rem Image input (optional): needs model\mmproj-F16.gguf; the vision part runs on the main PC only.
+set MMPROJ_ARGS=
+set VISION_INFO=off
+if not "%VISION%"=="1" goto vision_done
+if not exist "%ROOT%\model\mmproj-F16.gguf" (
+  echo   VISION=1 but model\mmproj-F16.gguf is missing: starting without image input.
+  goto vision_done
+)
+echo   Copying the vision file mmproj-F16.gguf ^(only the first time, 0.9 GB^)...
+robocopy "%ROOT%\model" "%LOCAL_DIR%" mmproj-F16.gguf /R:2 /W:5 /NJH /NJS /NDL
+set MMPROJ=%LOCAL_DIR%\mmproj-F16.gguf
+if not exist "%MMPROJ%" set MMPROJ=%ROOT%\model\mmproj-F16.gguf
+if not defined IMAGE_TOKENS set IMAGE_TOKENS=256
+set MMPROJ_ARGS=--mmproj "%MMPROJ%" --no-mmproj-offload --image-max-tokens %IMAGE_TOKENS%
+set VISION_INFO=on, max %IMAGE_TOKENS% tokens per image
+:vision_done
 if not exist "%ROOT%\cluster\paused" mkdir "%ROOT%\cluster\paused"
 set DASH_AUTO=
 if "%AUTO_PAUSE%"=="1" set DASH_AUTO=auto %MIN_WORKERS%
@@ -43,14 +59,14 @@ if %N_WORKERS% LSS 2 (
 )
 for /f %%i in ('bin\qwen-helper.exe myip') do set MYIP=%%i
 echo %MYIP%> "%ROOT%\cluster\server.txt"
-echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users, context %CTX_TOTAL%. Main IP %MYIP%
+echo [3/3] Starting: %N_WORKERS% workers, -ngl %NGL% -ts %TS%, %USERS% users, context %CTX_TOTAL%, images %VISION_INFO%. Main IP %MYIP%
 echo   First start sends ~5 GB to the workers (1 Gbps: 1-2 min, 100 Mbps: 8-10 min).
 echo   When "listening on" appears, anyone can use open_ui.bat / ask.bat.
 echo   Keep this window open.
 if %N_WORKERS%==2 echo   NOTE: only 2 workers - the main PC also computes. Needs ~2.1 GB free here
 if %N_WORKERS%==2 echo         and ~2 GB on each worker. Start a 3rd worker if it crashes.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
-  -lm none -t 4 -c %CTX_TOTAL% --kv-unified -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
+  %MMPROJ_ARGS% -lm none -t 4 -c %CTX_TOTAL% --kv-unified -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
   --reasoning off --host 0.0.0.0 --port 8080 ^
   --temp 0.7 --top-p 0.8 --top-k 20
 echo.
