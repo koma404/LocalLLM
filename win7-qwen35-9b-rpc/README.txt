@@ -76,8 +76,10 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
 二点四、系统提示词与工具
 ------------------------
 系统提示词（所有人默认的“人设”）：编辑 cluster\system-prompt.txt（记事本即可），重启主机生效。
-  网页界面：第一次打开界面的人自动用它；已经自己改过 System Message 的人保留自己的，
-            在设置里点“恢复默认”就会换成这份。
+  网页界面：每次打开界面都会自动用它（以前打开过界面的浏览器也一样）；
+            自己在设置里写了 System Message 的人保留自己的，点“Reset to default”就换回这份。
+            注意：把 System Message 清空不会生效，下次打开又会填回这份；想不用提示词，
+            请改 cluster\system-prompt.txt。网页里关掉 JavaScript 工具同样不会保留，请用 TOOLS=0。
   ask.bat / ask_think.bat：每次都会带上它。
   提示词会在主机每次启动后提前处理好，存到 LOCAL_DIR\cache\sys.bin（settings.bat 里 CACHE_PROMPT=1）：
     第一次启动时计算并保存，之后直接读取，第一句话不用再等提示词处理。

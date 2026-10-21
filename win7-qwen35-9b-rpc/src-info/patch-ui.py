@@ -6,6 +6,8 @@
 # It also pre-approves the browser-only tools (get_datetime, run_javascript) and drops the
 # browser get_info tool: its fixed reply ("This environment is browser-only ...") made the
 # model describe the user's browser as its own runtime, overriding the system prompt.
+# Server UI defaults (--ui-config-file: system prompt, JavaScript tool) are applied on every visit,
+# not only on a browser's first visit, and "Reset to default" restores them.
 # The bundle is renamed and the service worker manifest updated, so browsers that cached
 # the old UI pick up the new one.
 #
@@ -65,6 +67,18 @@ def main():
     js = replace_once(js, ",this.hasServerTool(Di.SERVER_GET_INFO)||e.push(O6t()),e}", ",e}",
                       "browser get_info tool")
 
+    # apply the server's UI defaults on every visit, not only the first: a browser that opened the UI
+    # before would otherwise never get the default system prompt or the JavaScript tool. Settings the
+    # user changed away from the built-in default are kept (same rule as the first-visit code).
+    js = replace_once(js, "if(Object.keys(e).length===0&&!(r&&this.isFirstVisit))return;",
+                      "if(Object.keys(e).length===0&&!r)return;", "server defaults early return")
+    js = replace_once(js, "if(r&&this.isFirstVisit){this.isFirstVisit=!1;", "if(r){this.isFirstVisit=!1;",
+                      "first-visit server defaults")
+    # "Reset to default" restores the server's UI defaults, not the empty built-in ones
+    js = replace_once(js, "resetConfig(){this.config={...Pu},this.enforceDiscoverCoupling(),this.saveConfig()}",
+                      "resetConfig(){this.config={...Pu},this.enforceDiscoverCoupling(),this.saveConfig(),this.syncWithServerDefaults()}",
+                      "reset config")
+
     # name the bundle after its content: a cached older patched bundle can never be mistaken for this one
     new_name = old_name + "-q" + hashlib.md5(js.encode("utf-8")).hexdigest()[:8]
     open(os.path.join(dist, "_app", "immutable", new_name + ".js"), "w", encoding="utf-8").write(js)
@@ -79,7 +93,7 @@ def main():
     if n != 1:
         sys.exit("patch-ui: index entry not found in sw.js")
     open(sw_path, "w", encoding="utf-8").write(sw)
-    print(f"patch-ui: added Minimal ({budget} tokens), pre-approved browser tools, dropped get_info, bundle {old_name}.js -> {new_name}.js")
+    print(f"patch-ui: added Minimal ({budget} tokens), pre-approved browser tools, dropped get_info, server UI defaults on every visit, bundle {old_name}.js -> {new_name}.js")
 
 
 if __name__ == "__main__":
