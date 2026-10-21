@@ -3,7 +3,9 @@
 #
 # The Reasoning effort menu offers Off / Low (512) / Medium (2048) / High (8192) / Max.
 # 512 tokens is long at ~2.5 t/s, so this inserts "Minimal" (default 256 tokens) after Off.
-# It also pre-approves the browser-only tools (get_datetime, get_info, run_javascript).
+# It also pre-approves the browser-only tools (get_datetime, run_javascript) and drops the
+# browser get_info tool: its fixed reply ("This environment is browser-only ...") made the
+# model describe the user's browser as its own runtime, overriding the system prompt.
 # The bundle is renamed and the service worker manifest updated, so browsers that cached
 # the old UI pick up the new one.
 #
@@ -55,8 +57,13 @@ def main():
     # pre-approve the tools that run only inside the browser (clock, runtime info, sandboxed JavaScript),
     # so users are not asked "Allow use of ...?" on every call; server / MCP tools still ask
     js = replace_once(js, "{const e=localStorage.getItem(r9);if(e)for",
-                      '{["browser:get_datetime","browser:get_info","browser:run_javascript"].forEach(k=>this._tools.add(k));'
+                      '{["browser:get_datetime","browser:run_javascript"].forEach(k=>this._tools.add(k));'
                       "const e=localStorage.getItem(r9);if(e)for", "permission store initializer")
+
+    # drop get_info (added in the browser when the server has no tools): it only says
+    # "browser-only, cannot read files", and the model then answers "who/where are you" from it
+    js = replace_once(js, ",this.hasServerTool(Di.SERVER_GET_INFO)||e.push(O6t()),e}", ",e}",
+                      "browser get_info tool")
 
     # name the bundle after its content: a cached older patched bundle can never be mistaken for this one
     new_name = old_name + "-q" + hashlib.md5(js.encode("utf-8")).hexdigest()[:8]
@@ -72,7 +79,7 @@ def main():
     if n != 1:
         sys.exit("patch-ui: index entry not found in sw.js")
     open(sw_path, "w", encoding="utf-8").write(sw)
-    print(f"patch-ui: added Minimal ({budget} tokens) and pre-approved browser tools, bundle {old_name}.js -> {new_name}.js")
+    print(f"patch-ui: added Minimal ({budget} tokens), pre-approved browser tools, dropped get_info, bundle {old_name}.js -> {new_name}.js")
 
 
 if __name__ == "__main__":
