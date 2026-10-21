@@ -1,3 +1,15 @@
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 267b848..643c581 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3770,6 +3770,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+         "message injected before the end-of-thinking tag when reasoning budget is exhausted (default: none)",
+         [](common_params & params, const std::string & value) {
+             params.sampling.reasoning_budget_message = value;
++            string_process_escapes(params.sampling.reasoning_budget_message); // patched: allow \n from .bat files
+         }
+     ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_THINK_BUDGET_MESSAGE"));
+     add_opt(common_arg(
 diff --git a/ggml/src/ggml-rpc/ggml-rpc.cpp b/ggml/src/ggml-rpc/ggml-rpc.cpp
 index 49f1107..62e5281 100644
 --- a/ggml/src/ggml-rpc/ggml-rpc.cpp

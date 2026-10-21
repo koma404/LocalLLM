@@ -67,7 +67,8 @@ if %N_WORKERS%==2 echo   NOTE: only 2 workers - the main PC also computes. Needs
 if %N_WORKERS%==2 echo         and ~2 GB on each worker. Start a 3rd worker if it crashes.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
   %MMPROJ_ARGS% -lm none -t 4 -c %CTX_TOTAL% --kv-unified -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
-  --reasoning off --host 0.0.0.0 --port 8080 ^
+  --reasoning off --reasoning-budget-message "\n\nOK, time is up. I will give the final answer now.\n" ^
+  --host 0.0.0.0 --port 8080 ^
   --temp 0.7 --top-p 0.8 --top-k 20
 echo.
 echo Server stopped (a worker went offline or was paused for low memory). Restarting in 10 s, Ctrl+C to quit...

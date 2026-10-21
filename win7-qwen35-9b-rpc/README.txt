@@ -58,11 +58,16 @@ open_ui.bat / ask.bat 读这个文件就知道该连哪台主机。
 3. 提问：任何机器打开 Z:\qwen9b，双击
       open_ui.bat     图形界面：自动等主机就绪，然后用浏览器打开 http://主机IP:8080
                       （如果没自动打开，就在 Supermium 地址栏手动输入窗口里显示的地址）
-                      输入框旁的灯泡按钮可开关思考（Default/Off = 不思考，Low = 最多 512 token）；
+                      输入框旁的灯泡按钮可开关思考：
+                        Default / Off = 不思考
+                        Minimal = 最多 256 token（约 100 秒）← 日常问答推荐，本仓库新加的档位
+                        Low = 512 / Medium = 2048 / High = 8192 / Max = 不限
+                      思考预算用完时会插入一句 "OK, time is up..." 让模型马上转入回答
+                      （实测不加这句时 256 偶尔会因思路被截断而答错）；
                       输入框旁的附件按钮可以上传图片（或直接粘贴截图），让模型看图回答；
                       每条回答下方显示速度；对话记录保存在各自浏览器里，左侧栏铅笔图标 = 新对话
       ask.bat         多轮对话（不思考）。/clear 新对话，/exit 退出
-      ask_think.bat   多轮对话（思考，最多 400 token，约 3 分钟后作答）
+      ask_think.bat   多轮对话（思考，最多 256 token，约 2 分钟后作答）
       test.bat        单轮测速，最后一行 [ Prompt: xx t/s | Generation: xx t/s ]
    如果主机还在加载，open_ui.bat / ask.bat 会自动等待（最多 5 分钟）。
    最多 USERS 个人同时生成，多出来的人会排队。
@@ -160,6 +165,9 @@ start_main.bat 会在 10 秒后自动重新扫描在线的工作机，并用剩�
   3) 进度显示：llama-server 加载时打印进度条和剩余时间；ggml-rpc-server 打印已接收的 MB 数和速度，
      并把每次探测连接、每个缓存文件的日志降为调试级别（避免刷屏）；
   4) 工作机状态：设置 QWEN_STATUS_FILE 时，ggml-rpc-server 每 3 秒写出内存、换页速率、每步计算耗时。
+  5) --reasoning-budget-message 支持 \n 转义（批处理里没法直接写换行）；
+  6) 网页界面多一个 Minimal（256 token）思考档位：src-info\patch-ui.py 修改官方界面文件后
+     放进 tools\ui\dist 再编译（llama.cpp 优先嵌入这个目录），未下载 npm 等任何构建工具。
 qwen-helper.exe（src-info\qwen-helper.c）是给批处理用的小工具：取本机 IP、探测端口、
 检查服务状态、根据在线工作机数量生成分配方案。只用到 Win7 自带的系统函数。
 测试：除云端 Linux 模拟外，还在 Wine（Win7 SP1 模式）里实际运行了这些 Windows 程序和批处理：
