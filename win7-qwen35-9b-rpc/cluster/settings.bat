@@ -23,6 +23,11 @@ rem IMAGE_TOKENS = max tokens one image becomes: bigger = more detail but slower
 set VISION=1
 set IMAGE_TOKENS=256
 rem
+rem Default system prompt for everyone: edit cluster\system-prompt.txt (UTF-8, Notepad is fine).
+rem Tools in the web UI: 1 = the model may run JavaScript in the browser sandbox for exact
+rem calculation (works best with a thinking level such as Minimal), 0 = off.
+set TOOLS=1
+rem
 rem Optional: lock the roles to fixed PCs by computer name (run "hostname" to see it).
 rem Leave empty to allow any PC. WORKER_PCS is a space-separated list.
 set MAIN_PC=

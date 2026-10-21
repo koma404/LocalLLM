@@ -24,6 +24,8 @@ echo If it is, the main PC firewall may be blocking port 8080 (see README).
 pause
 exit /b 1
 :connected
+set SYSF=
+bin\qwen-helper.exe prompt cluster\system-prompt.txt "%TEMP%\qwen_system_prompt.txt" && set SYSF=-sysf "%TEMP%\qwen_system_prompt.txt"
 chcp 65001 >nul
-bin\llama-cli.exe --server-base http://%SERVER%:8080 --color off --log-colors off --simple-io %*
+bin\llama-cli.exe --server-base http://%SERVER%:8080 %SYSF% --color off --log-colors off --simple-io %*
 pause

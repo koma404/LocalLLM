@@ -10,6 +10,73 @@ index 267b848..643c581 100644
          }
      ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_THINK_BUDGET_MESSAGE"));
      add_opt(common_arg(
+diff --git a/common/reasoning-budget.cpp b/common/reasoning-budget.cpp
+index 4884299..76f7a71 100644
+--- a/common/reasoning-budget.cpp
++++ b/common/reasoning-budget.cpp
+@@ -65,8 +65,14 @@ struct common_reasoning_budget_ctx {
+     size_t force_pos;         // next position in forced_tokens to force
+ 
+     int32_t end_match;        // index into end_matcher.seqs of the sequence that transitioned to DONE, -1 if none
++
++    int32_t answer_guard;     // patched: tokens after a forced end during which end-of-generation is banned
+ };
+ 
++// patched: after the budget forces the end of thinking, a model cut off mid-thought sometimes ends
++// its turn right away, leaving an empty answer; keep it from stopping for the first few tokens
++static const int32_t REASONING_BUDGET_ANSWER_GUARD = 8;
++
+ static const char * common_reasoning_budget_name(const struct llama_sampler * /*smpl*/) {
+     return "reasoning-budget";
+ }
+@@ -139,11 +145,15 @@ static void common_reasoning_budget_accept(struct llama_sampler * smpl, llama_to
+             if (ctx->force_pos >= ctx->forced_tokens.size()) {
+                 ctx->state = REASONING_BUDGET_DONE;
+                 ctx->end_match = match;
++                ctx->answer_guard = REASONING_BUDGET_ANSWER_GUARD;
+                 COM_TRC("%s", "forced sequence complete, done\n");
+             }
+             break;
+         }
+         case REASONING_BUDGET_DONE:
++            if (ctx->answer_guard > 0) {
++                ctx->answer_guard--;
++            }
+             // Re-arm on a new start tag: some models emit multiple <think> blocks
+             // per response, and each should get a fresh budget window.
+             if (ctx->start_matcher.advance(token) >= 0) {
+@@ -166,6 +176,15 @@ static void common_reasoning_budget_accept(struct llama_sampler * smpl, llama_to
+ static void common_reasoning_budget_apply(struct llama_sampler * smpl, llama_token_data_array * cur_p) {
+     auto * ctx = (common_reasoning_budget_ctx *) smpl->ctx;
+ 
++    if (ctx->state == REASONING_BUDGET_DONE && ctx->answer_guard > 0) {
++        for (size_t i = 0; i < cur_p->size; i++) {
++            if (llama_vocab_is_eog(ctx->vocab, cur_p->data[i].id)) {
++                cur_p->data[i].logit = -INFINITY;
++            }
++        }
++        return;
++    }
++
+     if (ctx->state != REASONING_BUDGET_FORCING) {
+         // passthrough — don't modify logits
+         return;
+@@ -193,6 +212,7 @@ static void common_reasoning_budget_reset(struct llama_sampler * smpl) {
+     ctx->end_matcher.reset();
+     ctx->force_pos = 0;
+     ctx->end_match = -1;
++    ctx->answer_guard = 0;
+ }
+ 
+ static struct llama_sampler * common_reasoning_budget_init_state(
+@@ -254,6 +274,7 @@ static struct llama_sampler * common_reasoning_budget_init_state(
+             /* .state         = */ initial_state,
+             /* .force_pos     = */ 0,
+             /* .end_match     = */ -1,
++            /* .answer_guard  = */ 0,
+         }
+     );
+ }
 diff --git a/ggml/src/ggml-rpc/ggml-rpc.cpp b/ggml/src/ggml-rpc/ggml-rpc.cpp
 index 49f1107..62e5281 100644
 --- a/ggml/src/ggml-rpc/ggml-rpc.cpp

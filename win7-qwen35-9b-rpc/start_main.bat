@@ -42,6 +42,9 @@ set MMPROJ_ARGS=--mmproj "%MMPROJ%" --no-mmproj-offload --image-max-tokens %IMAG
 set VISION_INFO=on, max %IMAGE_TOKENS% tokens per image
 :vision_done
 if not exist "%ROOT%\cluster\paused" mkdir "%ROOT%\cluster\paused"
+rem web UI defaults for new users: system prompt from cluster\system-prompt.txt + the tools switch
+if not defined TOOLS set TOOLS=1
+bin\qwen-helper.exe uiconfig "%ROOT%\cluster\system-prompt.txt" "%LOCAL_DIR%\ui-config.json" %TOOLS%
 set DASH_AUTO=
 if "%AUTO_PAUSE%"=="1" set DASH_AUTO=auto %MIN_WORKERS%
 rem live status window (users, workers, memory, speed); with AUTO_PAUSE=1 it also pauses workers that run out of memory
@@ -66,7 +69,7 @@ echo   Keep this window open.
 if %N_WORKERS%==2 echo   NOTE: only 2 workers - the main PC also computes. Needs ~2.1 GB free here
 if %N_WORKERS%==2 echo         and ~2 GB on each worker. Start a 3rd worker if it crashes.
 bin\llama-server.exe -m "%MODEL%" --rpc %WORKERS% -ngl %NGL% -ts %TS% -fit off ^
-  %MMPROJ_ARGS% -lm none -t 4 -c %CTX_TOTAL% --kv-unified -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
+  %MMPROJ_ARGS% --ui-config-file "%LOCAL_DIR%\ui-config.json" -lm none -t 4 -c %CTX_TOTAL% --kv-unified -np %USERS% --no-repack --cache-ram 0 --ctx-checkpoints 2 --metrics ^
   --reasoning off --reasoning-budget-message "\n\nOK, time is up. I will give the final answer now.\n" ^
   --host 0.0.0.0 --port 8080 ^
   --temp 0.7 --top-p 0.8 --top-k 20

@@ -3,6 +3,8 @@
 //   qwen-helper probe HOST:PORT [ms]         exit 0 if a TCP connect succeeds
 //   qwen-helper plan WORKERS_DIR             probe registered workers, print "set" lines for main
 //   qwen-helper health HOST:PORT [ms]        exit 0 if GET /health answers with "ok"
+//   qwen-helper prompt SRC OUT               clean copy of the system prompt (no BOM / CR) for llama-cli -sysf
+//   qwen-helper uiconfig SRC OUT [TOOLS]     web UI defaults JSON: system message + JavaScript sandbox tool
 //   qwen-helper dashboard ROOT HOST:PORT [auto MIN_WORKERS]
 //                                            live cluster status; with "auto" (main PC only) it pauses
 //                                            workers that run out of memory and restarts llama-server
@@ -437,6 +439,55 @@ static int cmd_dashboard(const char * root, const char * hp, int auto_pause, int
     return 0;
 }
 
+// ---------------------------------------------------------------- system prompt
+
+// reads a UTF-8 text file (Notepad may add a BOM) into a malloc'd, BOM-less, CR-less string
+static char * read_prompt(const char * path) {
+    FILE * f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    if (n < 0 || n > 65536) { fclose(f); return NULL; }
+    char * buf = (char *) malloc(n + 1);
+    size_t got = fread(buf, 1, n, f); fclose(f);
+    buf[got] = 0;
+    char * s = buf;
+    if ((unsigned char) s[0] == 0xEF && (unsigned char) s[1] == 0xBB && (unsigned char) s[2] == 0xBF) s += 3;
+    char * w = buf;
+    for (char * r = s; *r; r++) if (*r != '\r') *w++ = *r;
+    *w = 0;
+    while (w > buf && (w[-1] == '\n' || w[-1] == ' ')) *--w = 0;
+    return buf;
+}
+
+// prompt SRC OUT: clean copy for llama-cli -sysf
+static int cmd_prompt(const char * src, const char * out) {
+    char * p = read_prompt(src);
+    if (!p) return 1;
+    FILE * f = fopen(out, "wb");
+    if (!f) { free(p); return 1; }
+    fputs(p, f); fclose(f); free(p);
+    return 0;
+}
+
+// uiconfig SRC OUT TOOLS: default web UI settings (system message, JavaScript sandbox tool)
+static int cmd_uiconfig(const char * src, const char * out, int tools) {
+    char * p = read_prompt(src);
+    FILE * f = fopen(out, "wb");
+    if (!f) { free(p); return 1; }
+    fputs("{\"systemMessage\":\"", f);
+    for (const char * c = p ? p : ""; *c; c++) {
+        unsigned char ch = (unsigned char) *c;
+        if (ch == '"' || ch == '\\') { fputc('\\', f); fputc(ch, f); }
+        else if (ch == '\n') fputs("\\n", f);
+        else if (ch == '\t') fputs("\\t", f);
+        else if (ch < 0x20) continue;
+        else fputc(ch, f);
+    }
+    fprintf(f, "\",\"jsSandboxEnabled\":%s}", tools ? "true" : "false");
+    fclose(f); free(p);
+    return 0;
+}
+
 int main(int argc, char ** argv) {
     WSADATA w; WSAStartup(MAKEWORD(2, 2), &w);
     int ms = argc > 3 ? atoi(argv[3]) : 1500;
@@ -444,8 +495,10 @@ int main(int argc, char ** argv) {
     if (argc >= 3 && !strcmp(argv[1], "probe"))                return cmd_probe(argv[2], ms);
     if (argc >= 3 && !strcmp(argv[1], "health"))               return cmd_health(argv[2], ms);
     if (argc >= 3 && !strcmp(argv[1], "plan"))                 return cmd_plan(argv[2]);
+    if (argc >= 4 && !strcmp(argv[1], "prompt"))               return cmd_prompt(argv[2], argv[3]);
+    if (argc >= 4 && !strcmp(argv[1], "uiconfig"))             return cmd_uiconfig(argv[2], argv[3], argc >= 5 ? atoi(argv[4]) : 1);
     if (argc >= 4 && !strcmp(argv[1], "dashboard"))
         return cmd_dashboard(argv[2], argv[3], argc >= 5 && !strcmp(argv[4], "auto"), argc >= 6 ? atoi(argv[5]) : 3);
-    fprintf(stderr, "usage: qwen-helper myip | probe HOST:PORT [ms] | health HOST:PORT [ms] | plan DIR | dashboard ROOT HOST:PORT [auto MIN]\n");
+    fprintf(stderr, "usage: qwen-helper myip | probe HOST:PORT [ms] | health HOST:PORT [ms] | plan DIR | prompt SRC OUT | uiconfig SRC OUT [0|1] | dashboard ROOT HOST:PORT [auto MIN]\n");
     return 2;
 }
