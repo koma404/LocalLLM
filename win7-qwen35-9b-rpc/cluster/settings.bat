@@ -28,6 +28,10 @@ rem Tools in the web UI: 1 = the model may run JavaScript in the browser sandbox
 rem calculation (works best with a thinking level such as Minimal), 0 = off.
 set TOOLS=1
 rem
+rem Pre-compute the system prompt after each start (saved in LOCAL_DIR\cache), so the first
+rem question is fast. 1 = on, 0 = off.
+set CACHE_PROMPT=1
+rem
 rem Optional: lock the roles to fixed PCs by computer name (run "hostname" to see it).
 rem Leave empty to allow any PC. WORKER_PCS is a space-separated list.
 set MAIN_PC=

@@ -91,6 +91,39 @@ static int cmd_health(const char * hp, int ms) {
 }
 
 
+/* POST a small JSON body read from a file; prints the reply, exit 0 on HTTP 200 */
+static int cmd_post(const char * hp, const char * path, const char * body_file, int ms) {
+    static char body[1024], buf[4096];
+    FILE * f = fopen(body_file, "rb");
+    if (!f) { fprintf(stderr, "cannot read %s\n", body_file); return 1; }
+    size_t bn = fread(body, 1, sizeof(body) - 1, f);
+    fclose(f); body[bn] = 0;
+    SOCKET s = connect_to(hp, ms);
+    if (s == INVALID_SOCKET) return 1;
+    DWORD to = ms; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+    char req[512];
+    snprintf(req, sizeof(req), "POST %s HTTP/1.0\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: %u\r\n\r\n", path, (unsigned)bn);
+    send(s, req, (int)strlen(req), 0);
+    send(s, body, (int)bn, 0);
+    int n = 0, r;
+    while (n < (int)sizeof(buf) - 1 && (r = recv(s, buf + n, sizeof(buf) - 1 - n, 0)) > 0) n += r;
+    buf[n] = 0; closesocket(s);
+    printf("%s\n", buf);
+    return strstr(buf, " 200 ") ? 0 : 1;
+}
+
+/* exit 0 when two small files are byte-for-byte equal, 1 when they differ or one is missing */
+static int cmd_same(const char * a, const char * b) {
+    static char x[65536], y[65536];
+    FILE * fa = fopen(a, "rb");
+    FILE * fb = fa ? fopen(b, "rb") : NULL;
+    if (!fa || !fb) { if (fa) fclose(fa); return 1; }
+    size_t na = fread(x, 1, sizeof(x), fa), nb = fread(y, 1, sizeof(y), fb);
+    fclose(fa); fclose(fb);
+    if (na >= sizeof(x) || nb >= sizeof(y)) return 1;
+    return (na == nb && !memcmp(x, y, na)) ? 0 : 1;
+}
+
 static void read_small(const char * path, char * buf, int cap);
 
 static int is_paused(const char * root_cluster, const char * worker_file) {
@@ -494,11 +527,13 @@ int main(int argc, char ** argv) {
     if (argc >= 2 && !strcmp(argv[1], "myip"))                 return cmd_myip();
     if (argc >= 3 && !strcmp(argv[1], "probe"))                return cmd_probe(argv[2], ms);
     if (argc >= 3 && !strcmp(argv[1], "health"))               return cmd_health(argv[2], ms);
+    if (argc >= 4 && !strcmp(argv[1], "same"))                 return cmd_same(argv[2], argv[3]);
+    if (argc >= 5 && !strcmp(argv[1], "post"))                 return cmd_post(argv[2], argv[3], argv[4], argc >= 6 ? atoi(argv[5]) : 60000);
     if (argc >= 3 && !strcmp(argv[1], "plan"))                 return cmd_plan(argv[2]);
     if (argc >= 4 && !strcmp(argv[1], "prompt"))               return cmd_prompt(argv[2], argv[3]);
     if (argc >= 4 && !strcmp(argv[1], "uiconfig"))             return cmd_uiconfig(argv[2], argv[3], argc >= 5 ? atoi(argv[4]) : 1);
     if (argc >= 4 && !strcmp(argv[1], "dashboard"))
         return cmd_dashboard(argv[2], argv[3], argc >= 5 && !strcmp(argv[4], "auto"), argc >= 6 ? atoi(argv[5]) : 3);
-    fprintf(stderr, "usage: qwen-helper myip | probe HOST:PORT [ms] | health HOST:PORT [ms] | plan DIR | prompt SRC OUT | uiconfig SRC OUT [0|1] | dashboard ROOT HOST:PORT [auto MIN]\n");
+    fprintf(stderr, "usage: qwen-helper myip | probe HOST:PORT [ms] | health HOST:PORT [ms] | post HOST:PORT PATH BODYFILE [ms] | same FILE1 FILE2 | plan DIR | prompt SRC OUT | uiconfig SRC OUT [0|1] | dashboard ROOT HOST:PORT [auto MIN]\n");
     return 2;
 }
