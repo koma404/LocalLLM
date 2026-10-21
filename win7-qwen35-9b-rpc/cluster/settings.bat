@@ -10,7 +10,7 @@ rem
 rem Total context (tokens) shared by all users: one user alone can use all of it.
 rem Each 1000 tokens costs only ~32 MB in total (spread over the PCs), so it can be large.
 rem 16384 adds ~0.15 GB per worker compared with the old 6144; 32768 adds ~0.4 GB.
-set CTX_TOTAL=16384
+set CTX_TOTAL=32768
 rem
 rem Auto-pause: the status window on the main PC stops using a worker that keeps running
 rem out of memory / swapping (then restarts the server without it), but never goes below MIN_WORKERS.
